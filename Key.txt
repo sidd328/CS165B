@@ -1,0 +1,5 @@
+Budget = {Low:0, Medium:1, High:2}
+Genre = {Documentary:0, Drama:1, Comedy:2}
+FamousActors = {No:0, Yes:1}
+Director = {Unknown:0, Great:1}
+GoodMovie = {No:0, Yes:1}
