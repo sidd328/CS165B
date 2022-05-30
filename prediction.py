@@ -46,6 +46,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader 
 from torch.utils.data import Dataset
 from PIL import Image
+from einops import rearrange
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -63,9 +64,12 @@ import copy
 import random
 import time
 import os
+import natsort
 
 BATCH_SIZE = 64
 N_EPOCHS = 30
+PATCH_SIZE = 4
+VALID_RATIO = 0.9
 
 
 
@@ -181,18 +185,21 @@ class ViT(nn.Module):
         x = self.to_cls_token(x[:, 0])
         return self.mlp_head(x)
 
+                        
 
 
 #Load in data (not complete)
+#Transform to convert to tensor
+test_transforms = transforms.Compose([transforms.Grayscale(num_output_channels=1),
+                            transforms.ToTensor()
+                                      ])
+
 main_dir = "hw4_train"
-train_data = ImageFolder(main_dir)
+train_data = ImageFolder(main_dir, transform = test_transforms)
 loader = DataLoader(train_data, batch_size=1, num_workers=4)
 mstd = next(iter(loader))
 _mean = mstd[0].mean()
 _std  =  mstd[0].std()
-
-
-
 
 #Transforms for data
 train_transforms = transforms.Compose([transforms.Grayscale(num_output_channels=1),
@@ -202,23 +209,16 @@ train_transforms = transforms.Compose([transforms.Grayscale(num_output_channels=
                             transforms.Normalize(mean=_mean, std=_std)
                                       ])
 
-test_transforms = transforms.Compose([
-                           transforms.ToTensor(),
-                           transforms.Normalize(mean=_mean, std=_std)
-                                     ])
-
 
 
 
 #Load in training data
-train_data.dataset.transform = train_transforms
+train_data = ImageFolder(main_dir, transform = train_transforms)
 loader = DataLoader(train_data, batch_size=1, num_workers=4)
-
-
+mstd = next(iter(loader))
 
 
 #Split into validation and training data
-VALID_RATIO = 0.9
 n_train_examples = int(len(train_data) * VALID_RATIO)
 n_valid_examples = len(train_data) - n_train_examples
 
@@ -232,6 +232,7 @@ train_iterator = torch.utils.data.DataLoader(train_data,
                                  batch_size=BATCH_SIZE,)
 
 valid_iterator = torch.utils.data.DataLoader(valid_data,
+                                shuffle = True,
                                  batch_size=BATCH_SIZE,)
 
 
@@ -248,8 +249,6 @@ def train_epoch(model, optimizer, data_loader, loss_history):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        if i == 5:
-            break
 
         if i % 100 == 0:
             print('[' +  '{:5}'.format(i * len(data)) + '/' + '{:5}'.format(total_samples) +
@@ -288,7 +287,7 @@ def evaluate(model, data_loader, loss_history):
 
 #Training
 start_time = time.time()
-model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
+model = ViT(image_size=28, patch_size=PATCH_SIZE, num_classes=10, channels=1,
             dim=64, depth=6, heads=8, mlp_dim=128)
 optimizer = optim.Adam(model.parameters(), lr=0.003)
 
@@ -308,7 +307,7 @@ for epoch in range(1, N_EPOCHS + 1):
       print("New best loss & New model saved")
 
 
-print('Execution time:', '{:5.2f}'.format(time.time() - start_time), 'seconds')
+# print('Execution time:', '{:5.2f}'.format(time.time() - start_time), 'seconds')
 
 
 
@@ -333,7 +332,7 @@ class CustomDataSet(Dataset):
         self.main_dir = main_dir
         self.transform = transform
         all_imgs = os.listdir(main_dir)
-        self.total_imgs = all_imgs
+        self.total_imgs = natsort.natsorted(all_imgs)
 
     def __len__(self):
         return len(self.total_imgs)
@@ -353,7 +352,7 @@ my_dataset = CustomDataSet(test_path, transform=train_transforms)
 test_loader = data.DataLoader(my_dataset, batch_size=50, shuffle=False, drop_last = True)
 
 PATH = "second.pth"
-model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
+model = ViT(image_size=28, patch_size=PATCH_SIZE, num_classes=10, channels=1,
             dim=64, depth=6, heads=8, mlp_dim=128)
 model.load_state_dict(torch.load (PATH))
 test(model, test_loader)
